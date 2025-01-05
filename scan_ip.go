@@ -117,7 +117,7 @@ func scanIP(ip string, nmapArgs string) (ScanResult, error) {
 	return result, nil
 }
 
-// 添加读取Excel的函数
+// 读取Excel表内容
 func readExcel(filename string) ([]ExcelInfo, error) {
 	f, err := excelize.OpenFile(filename)
 	if err != nil {
@@ -147,7 +147,7 @@ func readExcel(filename string) ([]ExcelInfo, error) {
 	return infos, nil
 }
 
-// 修改exportToExcel函数，添加append参数支持追加模式
+// 结果写入Excel
 func exportToExcel(results map[string]ScanResult, sourceInfos []ExcelInfo, filename string, append bool) error {
 	var f *excelize.File
 	var currentRow int
@@ -260,7 +260,7 @@ func exportToExcel(results map[string]ScanResult, sourceInfos []ExcelInfo, filen
 		3: 20,  // 域名
 		4: 15,  // IP地址
 		5: 10,  // 端口
-		6: 15,  // 服务
+		6: 20,  // 服务
 		7: 25,  // 操作系统
 		8: 20,  // 备注
 		9: 10,  // 协议
@@ -276,7 +276,7 @@ func exportToExcel(results map[string]ScanResult, sourceInfos []ExcelInfo, filen
 	return f.SaveAs(filename)
 }
 
-// 添加新的函数用于写入单个IP的扫描结果
+// 写入单个IP的扫描结果
 func appendScanResult(ip string, result ScanResult, info ExcelInfo, filename string) error {
 	singleResult := make(map[string]ScanResult)
 	singleResult[ip] = result
