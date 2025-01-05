@@ -147,23 +147,49 @@ func readExcel(filename string) ([]ExcelInfo, error) {
 	return infos, nil
 }
 
-// 修改exportToExcel函数
-func exportToExcel(results map[string]ScanResult, sourceInfos []ExcelInfo, filename string) error {
-	f := excelize.NewFile()
+// 修改exportToExcel函数，添加append参数支持追加模式
+func exportToExcel(results map[string]ScanResult, sourceInfos []ExcelInfo, filename string, append bool) error {
+	var f *excelize.File
+	var currentRow int
+
+	if append {
+		// 如果文件存在则打开，不存在则创建新文件
+		if _, statErr := os.Stat(filename); statErr == nil {
+			var openErr error
+			f, openErr = excelize.OpenFile(filename)
+			if openErr != nil {
+				return fmt.Errorf("打开Excel文件失败: %v", openErr)
+			}
+			// 获取最后一行的行号
+			rows, _ := f.GetRows("Sheet1")
+			currentRow = len(rows) + 1
+		} else {
+			f = excelize.NewFile()
+			currentRow = 2 // 新文件从第二行开始写入数据
+			// 写入表头
+			headers := []string{"序号", "名称", "域名", "IP地址", "端口", "服务", "操作系统", "备注", "协议", "版本", "状态"}
+			for i, header := range headers {
+				cell, _ := excelize.CoordinatesToCellName(i+1, 1)
+				f.SetCellValue("Sheet1", cell, header)
+			}
+		}
+	} else {
+		f = excelize.NewFile()
+		currentRow = 2
+		// 写入表头
+		headers := []string{"序号", "名称", "域名", "IP地址", "端口", "服务", "操作系统", "备注", "协议", "版本", "状态"}
+		for i, header := range headers {
+			cell, _ := excelize.CoordinatesToCellName(i+1, 1)
+			f.SetCellValue("Sheet1", cell, header)
+		}
+	}
+
 	defer func() {
 		if err := f.Close(); err != nil {
 			fmt.Printf("关闭Excel文件时出错: %v\n", err)
 		}
 	}()
-	
-	// 修改表头顺序，添加新列
-	headers := []string{"序号", "名称", "域名", "IP地址", "端口", "服务", "操作系统", "备注", "协议", "版本", "状态"}
-	for i, header := range headers {
-		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
-		f.SetCellValue("Sheet1", cell, header)
-	}
-	
-	currentRow := 2
+
 	// 使用map存储IP对应的信息，方便查找
 	infoMap := make(map[string]ExcelInfo)
 	for _, info := range sourceInfos {
@@ -250,6 +276,15 @@ func exportToExcel(results map[string]ScanResult, sourceInfos []ExcelInfo, filen
 	return f.SaveAs(filename)
 }
 
+// 添加新的函数用于写入单个IP的扫描结果
+func appendScanResult(ip string, result ScanResult, info ExcelInfo, filename string) error {
+	singleResult := make(map[string]ScanResult)
+	singleResult[ip] = result
+	
+	singleInfo := []ExcelInfo{info}
+	return exportToExcel(singleResult, singleInfo, filename, true)
+}
+
 func main() {
 	// 添加新的命令行参数
 	sourceExcel := flag.String("s", "", "源Excel文件路径")
@@ -304,24 +339,52 @@ func main() {
 		}
 	}
 
-	// 收集所有扫描结果
-	results := make(map[string]ScanResult)
+	// 创建一个空的Excel文件，写入表头
+	if *excelOutput != "" {
+		emptyResults := make(map[string]ScanResult)
+		if err := exportToExcel(emptyResults, nil, *excelOutput, false); err != nil {
+			fmt.Printf("创建Excel文件时出错: %v\n", err)
+			return
+		}
+	}
+
+	// 创建IP到ExcelInfo的映射
+	infoMap := make(map[string]ExcelInfo)
+	for _, info := range sourceInfos {
+		infoMap[info.IP] = info
+	}
+
+	// 逐个扫描IP并立即写入结果
 	for _, ip := range ips {
 		fmt.Printf("正在扫描 %s...\n", ip)
 		result, err := scanIP(ip, *nmapArgs)
 		if err != nil {
 			fmt.Printf("扫描 %s 时出错: %v\n", ip, err)
+			// 仍然写入结果，但标记为扫描失败
+			if *excelOutput != "" {
+				info := infoMap[ip]
+				// 创建一个包含错误信息的扫描结果
+				failedResult := ScanResult{
+					OS:    []string{"扫描失败: " + err.Error()},
+					Ports: []PortInfo{},
+				}
+				if err := appendScanResult(ip, failedResult, info, *excelOutput); err != nil {
+					fmt.Printf("写入 %s 的失败结果时出错: %v\n", ip, err)
+				}
+			}
 			continue
 		}
-		results[ip] = result
-	}
 
-	// 输出到Excel
-	if *excelOutput != "" {
-		if err := exportToExcel(results, sourceInfos, *excelOutput); err != nil {
-			fmt.Printf("保存Excel文件时出错: %v\n", err)
-		} else {
-			fmt.Printf("\n结果已保存到Excel文件: %s\n", *excelOutput)
+		// 如果需要输出到Excel，立即写入当前结果
+		if *excelOutput != "" {
+			info := infoMap[ip]
+			if err := appendScanResult(ip, result, info, *excelOutput); err != nil {
+				fmt.Printf("写入 %s 的扫描结果时出错: %v\n", ip, err)
+			} else {
+				fmt.Printf("%s 的扫描结果已写入文件\n", ip)
+			}
 		}
 	}
+
+	fmt.Printf("\n所有扫描结果已保存到Excel文件: %s\n", *excelOutput)
 } 
