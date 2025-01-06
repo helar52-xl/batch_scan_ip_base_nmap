@@ -69,13 +69,17 @@ func parseNmapOutput(output string) ScanResult {
 			if idx := strings.Index(serviceInfo, " "); idx != -1 {
 				service = strings.TrimSpace(serviceInfo[:idx])
 				version = strings.TrimSpace(serviceInfo[idx+1:])
+				
+				// 如果有版本信息，则交换服务和版本
+				if version != "" {
+					service, version = version, service
+				}
 			}
 			
 			portInfo := PortInfo{
 				Port:     matches[1],
 				Protocol: matches[2],
 				State:    matches[3],
-				
 				Service:  service,
 				Version:  version,
 			}
