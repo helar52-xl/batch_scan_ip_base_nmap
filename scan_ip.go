@@ -33,6 +33,7 @@ type ExcelInfo struct {
 	Domain string
 	IP     string
 	PORT   string
+	REMARK   string 
 }
 
 func parseNmapOutput(output string) ScanResult {
@@ -158,6 +159,7 @@ func readExcel(filename string) ([]ExcelInfo, error) {
 				Domain: row[2],
 				IP:     "", // IP默认为空字符串
 				PORT:   "",
+				REMARK: "",
 			}
 			// 如果存在第四列（IP列）且不为空，则设置IP值
 			if len(row) >= 4 {
@@ -165,6 +167,9 @@ func readExcel(filename string) ([]ExcelInfo, error) {
 			}
 			if len(row) >= 5 {
 				info.PORT = row[4]
+			}
+			if len(row) >= 8{
+				info.REMARK = row[7]
 			}
 			infos = append(infos, info)
 		}
@@ -192,7 +197,7 @@ func exportToExcel(results map[string]ScanResult, sourceInfos []ExcelInfo, filen
 			f = excelize.NewFile()
 			currentRow = 2 // 新文件从第二行开始写入数据
 			// 写入表头
-			headers := []string{"所属单位", "网站名称", "网站地址", "IP", "端口", "应用", "操作系统", "操作系统猜测", "备注", "协议", "版本", "状态"}
+			headers := []string{"所属单位", "网站名称", "网站地址", "IP", "端口","协议", "应用", "操作系统", "备注", "操作系统猜测","状态"}
 			for i, header := range headers {
 				cell, _ := excelize.CoordinatesToCellName(i+1, 1)
 				f.SetCellValue("Sheet1", cell, header)
@@ -202,7 +207,7 @@ func exportToExcel(results map[string]ScanResult, sourceInfos []ExcelInfo, filen
 		f = excelize.NewFile()
 		currentRow = 2
 		// 写入表头
-		headers := []string{"所属单位", "网站名称", "网站地址", "IP", "端口", "应用", "操作系统", "操作系统猜测", "备注", "协议", "版本", "状态"}
+		headers := []string{"所属单位", "网站名称", "网站地址", "IP", "端口","协议", "应用", "操作系统", "备注", "操作系统猜测","状态"}
 		for i, header := range headers {
 			cell, _ := excelize.CoordinatesToCellName(i+1, 1)
 			f.SetCellValue("Sheet1", cell, header)
@@ -241,13 +246,13 @@ func exportToExcel(results map[string]ScanResult, sourceInfos []ExcelInfo, filen
 			f.SetCellValue("Sheet1", fmt.Sprintf("C%d", currentRow), info.Domain)
 			f.SetCellValue("Sheet1", fmt.Sprintf("D%d", currentRow), ip)
 			f.SetCellValue("Sheet1", fmt.Sprintf("E%d", currentRow), "") // 端口为空
-			f.SetCellValue("Sheet1", fmt.Sprintf("F%d", currentRow), "") // 应用为空
-			f.SetCellValue("Sheet1", fmt.Sprintf("G%d", currentRow), "") // 操作系统为空
-			f.SetCellValue("Sheet1", fmt.Sprintf("H%d", currentRow), "") // 操作系统猜测为空
+			f.SetCellValue("Sheet1", fmt.Sprintf("F%d", currentRow), "") // 协议为空
+			f.SetCellValue("Sheet1", fmt.Sprintf("G%d", currentRow), "") // 应用为空
+			f.SetCellValue("Sheet1", fmt.Sprintf("H%d", currentRow), "") // 操作系统为空
 			f.SetCellValue("Sheet1", fmt.Sprintf("I%d", currentRow), "") // 备注为空
-			f.SetCellValue("Sheet1", fmt.Sprintf("J%d", currentRow), "") // 协议为空
-			f.SetCellValue("Sheet1", fmt.Sprintf("K%d", currentRow), "") // 版本为空
-			f.SetCellValue("Sheet1", fmt.Sprintf("L%d", currentRow), "") // 状态为空
+			f.SetCellValue("Sheet1", fmt.Sprintf("J%d", currentRow), "") // 操作系统猜测为空
+			f.SetCellValue("Sheet1", fmt.Sprintf("K%d", currentRow), "") // 状态为空
+			f.SetCellValue("Sheet1", fmt.Sprintf("L%d", currentRow), "") // 协议(tcp)
 			currentRow++
 			continue
 		}
@@ -259,19 +264,19 @@ func exportToExcel(results map[string]ScanResult, sourceInfos []ExcelInfo, filen
 			f.SetCellValue("Sheet1", fmt.Sprintf("D%d", currentRow), ip)
 			f.SetCellValue("Sheet1", fmt.Sprintf("E%d", currentRow), port.Port)
 			service := strings.TrimSuffix(port.Service, "?")
-			f.SetCellValue("Sheet1", fmt.Sprintf("F%d", currentRow), service)
-			f.SetCellValue("Sheet1", fmt.Sprintf("G%d", currentRow), osInfo)
-			f.SetCellValue("Sheet1", fmt.Sprintf("H%d", currentRow), osGuessInfo) // 操作系统猜测
-			f.SetCellValue("Sheet1", fmt.Sprintf("I%d", currentRow), "")          // 备注列
-			f.SetCellValue("Sheet1", fmt.Sprintf("J%d", currentRow), port.Protocol)
-			f.SetCellValue("Sheet1", fmt.Sprintf("K%d", currentRow), port.Version)
-			f.SetCellValue("Sheet1", fmt.Sprintf("L%d", currentRow), port.State)
+			f.SetCellValue("Sheet1", fmt.Sprintf("F%d", currentRow), service)  //协议
+			f.SetCellValue("Sheet1", fmt.Sprintf("G%d", currentRow), port.Version)   //应用
+			f.SetCellValue("Sheet1", fmt.Sprintf("H%d", currentRow), osInfo) // 操作系统
+			f.SetCellValue("Sheet1", fmt.Sprintf("I%d", currentRow), info.REMARK)          // 备注列
+			f.SetCellValue("Sheet1", fmt.Sprintf("J%d", currentRow), osGuessInfo)
+			f.SetCellValue("Sheet1", fmt.Sprintf("K%d", currentRow), port.State)
+			f.SetCellValue("Sheet1", fmt.Sprintf("L%d", currentRow), port.Protocol)
 			currentRow++
 		}
 
 		// 合并单元格时需要包含新的操作系统猜测列
 		if currentRow > startRow+1 {
-			cols := []string{"A", "B", "C", "D", "G", "H", "I"} // 添加 H 列到合并列表
+			cols := []string{"A", "B", "C", "D", "H", "I", "J"}
 			for _, col := range cols {
 				f.MergeCell("Sheet1", fmt.Sprintf("%s%d", col, startRow),
 					fmt.Sprintf("%s%d", col, currentRow-1))
@@ -304,13 +309,13 @@ func exportToExcel(results map[string]ScanResult, sourceInfos []ExcelInfo, filen
 		3:  20, // 域名
 		4:  15, // IP地址
 		5:  10, // 端口
-		6:  20, // 服务
-		7:  25, // 操作系统
-		8:  25, // 操作系统猜测
+		6:  20, // 协议
+		7:  25, // 应用
+		8:  25, // 操作系统
 		9:  20, // 备注
-		10: 10, // 协议
-		11: 15, // 版本
-		12: 10, // 状态
+		10: 10, // 操作系统猜测
+		11: 15, // 状态
+		12: 10, // 协议(tcp)
 	}
 
 	for col, width := range columnWidths {
