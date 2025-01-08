@@ -28,10 +28,11 @@ type PortInfo struct {
 
 // 添加新的结构体用于存储Excel中的信息
 type ExcelInfo struct {
-	Number   string
-	Name     string
-	Domain   string
-	IP       string
+	Number string
+	Name   string
+	Domain string
+	IP     string
+	PORT   string
 }
 
 func parseNmapOutput(output string) ScanResult {
@@ -60,22 +61,22 @@ func parseNmapOutput(output string) ScanResult {
 		line := scanner.Text()
 		if matches := portRegex.FindStringSubmatch(line); len(matches) > 1 {
 			serviceInfo := matches[4]
-			
+
 			// 分离服务名称和版本信息
 			service := serviceInfo
 			version := ""
-			
+
 			// 如果包含空格，第一个空格前的是服务名，后面的是版本信息
 			if idx := strings.Index(serviceInfo, " "); idx != -1 {
 				service = strings.TrimSpace(serviceInfo[:idx])
 				version = strings.TrimSpace(serviceInfo[idx+1:])
-				
-				// 如果有版本信息，则交换服务和版本
-				if version != "" {
-					service, version = version, service
-				}
+
+				// // 如果有版本信息，则交换服务和版本
+				// if version != "" {
+				// 	service, version = version, service
+				// }
 			}
-			
+
 			portInfo := PortInfo{
 				Port:     matches[1],
 				Protocol: matches[2],
@@ -93,19 +94,19 @@ func parseNmapOutput(output string) ScanResult {
 func scanIP(ip string, nmapArgs string) (ScanResult, error) {
 	args := append(strings.Split(nmapArgs, " "), ip)
 	cmd := exec.Command("nmap", args...)
-	
+
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return ScanResult{}, fmt.Errorf("扫描错误: %v", err)
 	}
-	
+
 	// 解析扫描结果
 	result := parseNmapOutput(string(output))
-	
+
 	// 输出格式化结果
 	fmt.Printf("\n%s\n", strings.Repeat("=", 50))
 	fmt.Printf("IP地址: %s\n\n", ip)
-	
+
 	// 输出操作系统信息
 	fmt.Println("操作系统:")
 	if len(result.OS) > 0 {
@@ -115,7 +116,7 @@ func scanIP(ip string, nmapArgs string) (ScanResult, error) {
 	} else {
 		fmt.Println("- 未检测到操作系统")
 	}
-	
+
 	// 输出端口信息
 	fmt.Println("\n端口信息:")
 	for _, port := range result.Ports {
@@ -125,7 +126,7 @@ func scanIP(ip string, nmapArgs string) (ScanResult, error) {
 			port.Service,
 			port.State)
 	}
-	
+
 	return result, nil
 }
 
@@ -143,7 +144,10 @@ func readExcel(filename string) ([]ExcelInfo, error) {
 	}
 
 	var infos []ExcelInfo
-	// 跳过表头
+	// 跳过表头 i:=0
+	//
+	//默认不处理第一行
+	//
 	for i := 1; i < len(rows); i++ {
 		row := rows[i]
 		// 修改判断逻辑：只要前三列有值就处理该行
@@ -153,10 +157,14 @@ func readExcel(filename string) ([]ExcelInfo, error) {
 				Name:   row[1],
 				Domain: row[2],
 				IP:     "", // IP默认为空字符串
+				PORT:   "",
 			}
 			// 如果存在第四列（IP列）且不为空，则设置IP值
 			if len(row) >= 4 {
 				info.IP = row[3]
+			}
+			if len(row) >= 5 {
+				info.PORT = row[4]
 			}
 			infos = append(infos, info)
 		}
@@ -220,30 +228,30 @@ func exportToExcel(results map[string]ScanResult, sourceInfos []ExcelInfo, filen
 		if len(result.OS) > 0 {
 			osInfo = strings.Join(result.OS, "\n")
 		}
-		
+
 		osGuessInfo := " "
 		if len(result.OSGuesses) > 0 {
 			osGuessInfo = strings.Join(result.OSGuesses, "\n")
 		}
-		
+
 		if len(result.Ports) == 0 || ip == "" {
 			// 写入基本信息，其他字段留空
 			f.SetCellValue("Sheet1", fmt.Sprintf("A%d", currentRow), info.Number)
 			f.SetCellValue("Sheet1", fmt.Sprintf("B%d", currentRow), info.Name)
 			f.SetCellValue("Sheet1", fmt.Sprintf("C%d", currentRow), info.Domain)
 			f.SetCellValue("Sheet1", fmt.Sprintf("D%d", currentRow), ip)
-			f.SetCellValue("Sheet1", fmt.Sprintf("E%d", currentRow), "")  // 端口为空
-			f.SetCellValue("Sheet1", fmt.Sprintf("F%d", currentRow), "")  // 应用为空
-			f.SetCellValue("Sheet1", fmt.Sprintf("G%d", currentRow), "")  // 操作系统为空
-			f.SetCellValue("Sheet1", fmt.Sprintf("H%d", currentRow), "")  // 操作系统猜测为空
-			f.SetCellValue("Sheet1", fmt.Sprintf("I%d", currentRow), "")  // 备注为空
-			f.SetCellValue("Sheet1", fmt.Sprintf("J%d", currentRow), "")  // 协议为空
-			f.SetCellValue("Sheet1", fmt.Sprintf("K%d", currentRow), "")  // 版本为空
-			f.SetCellValue("Sheet1", fmt.Sprintf("L%d", currentRow), "")  // 状态为空
+			f.SetCellValue("Sheet1", fmt.Sprintf("E%d", currentRow), "") // 端口为空
+			f.SetCellValue("Sheet1", fmt.Sprintf("F%d", currentRow), "") // 应用为空
+			f.SetCellValue("Sheet1", fmt.Sprintf("G%d", currentRow), "") // 操作系统为空
+			f.SetCellValue("Sheet1", fmt.Sprintf("H%d", currentRow), "") // 操作系统猜测为空
+			f.SetCellValue("Sheet1", fmt.Sprintf("I%d", currentRow), "") // 备注为空
+			f.SetCellValue("Sheet1", fmt.Sprintf("J%d", currentRow), "") // 协议为空
+			f.SetCellValue("Sheet1", fmt.Sprintf("K%d", currentRow), "") // 版本为空
+			f.SetCellValue("Sheet1", fmt.Sprintf("L%d", currentRow), "") // 状态为空
 			currentRow++
 			continue
 		}
-		
+
 		for _, port := range result.Ports {
 			f.SetCellValue("Sheet1", fmt.Sprintf("A%d", currentRow), info.Number)
 			f.SetCellValue("Sheet1", fmt.Sprintf("B%d", currentRow), info.Name)
@@ -253,57 +261,63 @@ func exportToExcel(results map[string]ScanResult, sourceInfos []ExcelInfo, filen
 			service := strings.TrimSuffix(port.Service, "?")
 			f.SetCellValue("Sheet1", fmt.Sprintf("F%d", currentRow), service)
 			f.SetCellValue("Sheet1", fmt.Sprintf("G%d", currentRow), osInfo)
-			f.SetCellValue("Sheet1", fmt.Sprintf("H%d", currentRow), osGuessInfo)  // 操作系统猜测
-			f.SetCellValue("Sheet1", fmt.Sprintf("I%d", currentRow), "")  // 备注列
+			f.SetCellValue("Sheet1", fmt.Sprintf("H%d", currentRow), osGuessInfo) // 操作系统猜测
+			f.SetCellValue("Sheet1", fmt.Sprintf("I%d", currentRow), "")          // 备注列
 			f.SetCellValue("Sheet1", fmt.Sprintf("J%d", currentRow), port.Protocol)
 			f.SetCellValue("Sheet1", fmt.Sprintf("K%d", currentRow), port.Version)
 			f.SetCellValue("Sheet1", fmt.Sprintf("L%d", currentRow), port.State)
 			currentRow++
 		}
-		
+
 		// 合并单元格时需要包含新的操作系统猜测列
 		if currentRow > startRow+1 {
-			cols := []string{"A", "B", "C", "D", "G", "H", "I"}  // 添加 H 列到合并列表
+			cols := []string{"A", "B", "C", "D", "G", "H", "I"} // 添加 H 列到合并列表
 			for _, col := range cols {
-				f.MergeCell("Sheet1", fmt.Sprintf("%s%d", col, startRow), 
-							fmt.Sprintf("%s%d", col, currentRow-1))
+				f.MergeCell("Sheet1", fmt.Sprintf("%s%d", col, startRow),
+					fmt.Sprintf("%s%d", col, currentRow-1))
 			}
-			
-			// 设置单元格样式
+
+			// 设置单元格样式，包括边框
 			style, _ := f.NewStyle(&excelize.Style{
 				Alignment: &excelize.Alignment{
-					Vertical:   "center",
-					WrapText:  true,
+					Vertical: "center",
+					WrapText: true,
+				},
+				Border: []excelize.Border{
+					{Type: "left", Color: "000000", Style: 1},
+					{Type: "top", Color: "000000", Style: 1},
+					{Type: "bottom", Color: "000000", Style: 1},
+					{Type: "right", Color: "000000", Style: 1},
 				},
 			})
 			for _, col := range cols {
-				f.SetCellStyle("Sheet1", fmt.Sprintf("%s%d", col, startRow), 
-								fmt.Sprintf("%s%d", col, currentRow-1), style)
+				f.SetCellStyle("Sheet1", fmt.Sprintf("%s%d", col, startRow),
+					fmt.Sprintf("%s%d", col, currentRow-1), style)
 			}
 		}
 	}
-	
+
 	// 更新列宽设置
 	columnWidths := map[int]float64{
-		1: 10,  // 序号
-		2: 15,  // 名称
-		3: 20,  // 域名
-		4: 15,  // IP地址
-		5: 10,  // 端口
-		6: 20,  // 服务
-		7: 25,  // 操作系统
-		8: 25,  // 操作系统猜测
-		9: 20,  // 备注
+		1:  10, // 序号
+		2:  15, // 名称
+		3:  20, // 域名
+		4:  15, // IP地址
+		5:  10, // 端口
+		6:  20, // 服务
+		7:  25, // 操作系统
+		8:  25, // 操作系统猜测
+		9:  20, // 备注
 		10: 10, // 协议
 		11: 15, // 版本
 		12: 10, // 状态
 	}
-	
+
 	for col, width := range columnWidths {
 		colName, _ := excelize.ColumnNumberToName(col)
 		f.SetColWidth("Sheet1", colName, colName, width)
 	}
-	
+
 	return f.SaveAs(filename)
 }
 
@@ -311,7 +325,7 @@ func exportToExcel(results map[string]ScanResult, sourceInfos []ExcelInfo, filen
 func appendScanResult(ip string, result ScanResult, info ExcelInfo, filename string) error {
 	singleResult := make(map[string]ScanResult)
 	singleResult[ip] = result
-	
+
 	singleInfo := []ExcelInfo{info}
 	return exportToExcel(singleResult, singleInfo, filename, true)
 }
@@ -321,7 +335,7 @@ func main() {
 	sourceExcel := flag.String("s", "", "源Excel文件路径")
 	filePath := flag.String("f", "", "包含IP列表的文件路径")
 	ipList := flag.String("i", "", "IP地址列表，用逗号分隔")
-	nmapArgs := flag.String("a", "-sV -O", "nmap扫描参数")
+	nmapArgs := flag.String("a", "-sV -O -p 1-65535", "nmap扫描参数")
 	excelOutput := flag.String("e", "", "输出结果到Excel文件")
 	flag.Parse()
 
@@ -338,7 +352,7 @@ func main() {
 		}
 		// 只提取有IP的行到IP列表，但保留所有sourceInfos
 		for _, info := range sourceInfos {
-			if info.IP != "" {
+			if info.IP != "" && info.PORT == "" {
 				ips = append(ips, info.IP)
 			}
 		}
@@ -352,7 +366,7 @@ func main() {
 				return
 			}
 			defer file.Close()
-			
+
 			scanner := bufio.NewScanner(file)
 			for scanner.Scan() {
 				if ip := strings.TrimSpace(scanner.Text()); ip != "" {
@@ -424,4 +438,4 @@ func main() {
 	}
 
 	fmt.Printf("\n所有扫描结果已保存到Excel文件: %s\n", *excelOutput)
-} 
+}
