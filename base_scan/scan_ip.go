@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/xuri/excelize/v2"
 )
@@ -92,13 +93,14 @@ func parseNmapOutput(output string) ScanResult {
 	return result
 }
 
-func scanIP(ip string, nmapArgs string) (ScanResult, error) {
+func scanIP(ip string, nmapArgs string) (ScanResult, time.Duration, error) {
+	start := time.Now()
 	args := append(strings.Split(nmapArgs, " "), ip)
 	cmd := exec.Command("nmap", args...)
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return ScanResult{}, fmt.Errorf("扫描错误: %v", err)
+		return ScanResult{}, 0, fmt.Errorf("扫描错误: %v", err)
 	}
 
 	// 解析扫描结果
@@ -128,7 +130,9 @@ func scanIP(ip string, nmapArgs string) (ScanResult, error) {
 			port.State)
 	}
 
-	return result, nil
+	end := time.Now()
+	duration := end.Sub(start)
+	return result, duration, nil
 }
 
 // 修改readExcel函数
@@ -168,7 +172,7 @@ func readExcel(filename string) ([]ExcelInfo, error) {
 			if len(row) >= 5 {
 				info.PORT = row[4]
 			}
-			if len(row) >= 8{
+			if len(row) >= 8 {
 				info.REMARK = row[7]
 			}
 			infos = append(infos, info)
@@ -197,7 +201,7 @@ func exportToExcel(results map[string]ScanResult, sourceInfos []ExcelInfo, filen
 			f = excelize.NewFile()
 			currentRow = 2 // 新文件从第二行开始写入数据
 			// 写入表头
-			headers := []string{"所属单位", "网站名称", "网站地址", "IP", "端口","协议", "应用", "操作系统", "备注", "操作系统猜测","状态"}
+			headers := []string{"所属单位", "网站名称", "网站地址", "IP", "端口", "协议", "应用", "操作系统", "备注", "操作系统猜测", "状态"}
 			for i, header := range headers {
 				cell, _ := excelize.CoordinatesToCellName(i+1, 1)
 				f.SetCellValue("Sheet1", cell, header)
@@ -207,7 +211,7 @@ func exportToExcel(results map[string]ScanResult, sourceInfos []ExcelInfo, filen
 		f = excelize.NewFile()
 		currentRow = 2
 		// 写入表头
-		headers := []string{"所属单位", "网站名称", "网站地址", "IP", "端口","协议", "应用", "操作系统", "备注", "操作系统猜测","状态"}
+		headers := []string{"所属单位", "网站名称", "网站地址", "IP", "端口", "协议", "应用", "操作系统", "备注", "操作系统猜测", "状态"}
 		for i, header := range headers {
 			cell, _ := excelize.CoordinatesToCellName(i+1, 1)
 			f.SetCellValue("Sheet1", cell, header)
@@ -288,12 +292,12 @@ func exportToExcel(results map[string]ScanResult, sourceInfos []ExcelInfo, filen
 					Vertical: "center",
 					WrapText: true,
 				},
-				Border: []excelize.Border{
-					{Type: "left", Color: "000000", Style: 1},
-					{Type: "top", Color: "000000", Style: 1},
-					{Type: "bottom", Color: "000000", Style: 1},
-					{Type: "right", Color: "000000", Style: 1},
-				},
+				// Border: []excelize.Border{
+				// 	{Type: "left", Color: "000000", Style: 1},
+				// 	{Type: "top", Color: "000000", Style: 1},
+				// 	{Type: "bottom", Color: "000000", Style: 1},
+				// 	{Type: "right", Color: "000000", Style: 1},
+				// },
 			})
 			for _, col := range cols {
 				f.SetCellStyle("Sheet1", fmt.Sprintf("%s%d", col, startRow),
@@ -340,7 +344,7 @@ func main() {
 	sourceExcel := flag.String("s", "", "源Excel文件路径")
 	filePath := flag.String("f", "", "包含IP列表的文件路径")
 	ipList := flag.String("i", "", "IP地址列表，用逗号分隔")
-	nmapArgs := flag.String("a", "-sV -O -p 1-65535", "nmap扫描参数")
+	nmapArgs := flag.String("a", "-sV -O -Pn --host-timeout 58m -p 1-65535", "nmap扫描参数")
 	excelOutput := flag.String("e", "", "输出结果到Excel文件")
 	flag.Parse()
 
@@ -400,6 +404,7 @@ func main() {
 		}
 	}
 
+	var totalDuration time.Duration
 	// 按照源Excel的顺序处理所有记录
 	if *sourceExcel != "" {
 		for _, info := range sourceInfos {
@@ -410,10 +415,10 @@ func main() {
 						fmt.Printf("写入无IP记录时出错: %v\n", err)
 					}
 				}
-			} else {
-				// 对有IP的记录进行扫描
+			}else{
+				// 对没有端口信息的IP进行扫描
 				fmt.Printf("正在扫描 %s...\n", info.IP)
-				result, err := scanIP(info.IP, *nmapArgs)
+				result, duration, err := scanIP(info.IP, *nmapArgs)
 				if err != nil {
 					fmt.Printf("扫描 %s 时出错: %v\n", info.IP, err)
 					if *excelOutput != "" {
@@ -435,6 +440,7 @@ func main() {
 						fmt.Printf("%s 的扫描结果已写入文件\n", info.IP)
 					}
 				}
+				totalDuration += duration
 			}
 		}
 	} else {
@@ -443,4 +449,5 @@ func main() {
 	}
 
 	fmt.Printf("\n所有扫描结果已保存到Excel文件: %s\n", *excelOutput)
+	fmt.Printf("总耗时: %s\n", totalDuration)
 }
